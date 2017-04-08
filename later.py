@@ -2,10 +2,19 @@ from flask import Flask, request
 from flask_restful import abort, Resource, Api
 from flask_sqlalchemy import SQLAlchemy
 
-app = Flask(__name__)
+from flask_httpauth import HTTPBasicAuth
 
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:////tmp/test.db'
+from passlib.apps import custom_app_context as pwd_context
+
+app = Flask(__name__)
+auth = HTTPBasicAuth()
+
+app.config['SECRET_KEY'] = 'Very secret key'
+
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///test.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['SQLALCHEMY_COMMIT_ON_TEARDOWN'] = True
+
 db = SQLAlchemy(app)
 
 api = Api(app)
@@ -13,12 +22,19 @@ api = Api(app)
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True)
+    password_hash = db.Column(db.String(128))
 
     def __init__(self, username):
         self.username = username
 
     def __repr__(self):
         return "<User {}: {}>".format(self.id, self.username)
+
+    def hash_password(self, password):
+        self.password_hash = pwd_context.encrypt(password)
+
+    def verify_password(self, password):
+        return pwd_context.verify(password, self.password_hash)
 
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -41,6 +57,14 @@ class Item(db.Model):
 def abort_if_id_doesnt_exist(dic, id):
     if id not in dic:
         abort(404, message="id {} doesn't exist".format(id))
+
+@auth.verify_password
+def verify_password(username, password):
+    user = User.query.filter_by(username = username).first()
+    if not user or not user.verify_password(password):
+        return False
+    g.user = user
+    return True
 
 class UserAPI(Resource):
     def get(self, user_id):
@@ -71,34 +95,44 @@ class UsersAPI(Resource):
         return [e.as_dict() for e in User.query.all()]
 
     def post(self):
-        user = User(request.form['name'])
+        username = request.json.get('username')
+        password = request.json.get('password')
+        if username is None or password is None:
+            abort(400) # missing arguments
+        if User.query.filter_by(username = username).first() is not None:
+            abort(400) # existing user
+        user = User(username = username)
+        user.hash_password(password)
         db.session.add(user)
         db.session.commit()
-        return user.as_dict(), 201
+        return { 'username': user.username }, 201
 
 class ItemAPI(Resource):
+    @auth.login_required
     def get(self, item_id):
         item = Item.query.get(item_id)
         if item is None:
             abort(404, message="Item {} doesn't exist".format(item_id))
         return item.as_dict(), 200
 
+    @auth.login_required
     def put(self, item_id):
         item = Item.query.get(item_id)
         if item is None:
             abort(404, message="Item {} doesn't exist".format(item_id))
         
-        owner = request.form['owner']
+        owner = request.json.get('owner')
         user = User.query.get(owner)
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
         
-        item.url = request.form['url']
+        item.url = request.json.get('url')
         item.owner = owner
         db.session.add(item)
         db.session.commit()
         return item.as_dict(), 201
 
+    @auth.login_required
     def delete(self, item_id):
         item = Item.query.get(item_id)
         if item is None:
@@ -108,20 +142,23 @@ class ItemAPI(Resource):
         return "", 204
 
 class ItemsAPI(Resource):
+    @auth.login_required
     def get(self):
         return [e.as_dict() for e in Item.query.all()]
 
+    @auth.login_required
     def post(self):
-        owner = request.form['owner']
+        owner = request.json.get('owner')
         user = User.query.get(owner)
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        item = Item(owner, request.form['url'])
+        item = Item(owner, request.json.get('url'))
         db.session.add(item)
         db.session.commit()
         return item.as_dict(), 201
 
 class InboxAPI(Resource):
+    @auth.login_required
     def get(self, user_id):
         user = User.query.get(user_id)
         if user is None:
@@ -135,6 +172,11 @@ api.add_resource(ItemAPI, '/item/<int:item_id>')
 api.add_resource(ItemsAPI, '/items')
 
 api.add_resource(InboxAPI, '/inbox/<int:user_id>')
+
+# TODO connections (pairs of user ids)
+
+# TODO outbox
+# TODO login
 
 if __name__ == '__main__':
     app.run(debug=True)
