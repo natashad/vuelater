@@ -76,7 +76,7 @@ class Item(db.Model):
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
-class Connection(db.Model):
+class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_from = db.Column(db.Integer, db.ForeignKey("user.id"))
     user_to = db.Column(db.Integer, db.ForeignKey("user.id"))
@@ -149,7 +149,7 @@ class UsersAPI(Resource):
         user.hash_password(password)
         db.session.add(user)
         db.session.commit()
-        return { 'username': user.username }, 201
+        return {'status': 'OK'}, 201
 
 class ItemAPI(Resource):
     @auth.login_required
@@ -199,7 +199,7 @@ class ItemsAPI(Resource):
         item = Item(owner, g.user.id, request.json.get('url'))
         db.session.add(item)
         db.session.commit()
-        return item.as_dict(), 201
+        return {'status': 'OK'}, 201
 
 class InboxAPI(Resource):
     @auth.login_required
@@ -211,11 +211,35 @@ class OutboxAPI(Resource):
     def get(self):
         return [e.as_dict() for e in Item.query.filter_by(sender=g.user.id).all()]
 
+class FriendsAPI(Resource):
+    @auth.login_required
+    def get(self):
+        return [{'username' : e.user_to} for e in Item.query.filter_by(user_from=g.user.id).all()]
+
+    @auth.login_required
+    def post(self):
+        friendee = request.json.get('friendee')
+        user = User.query.filter_by(username=friendee).first()
+        if user is None:
+            abort(404, message="User {} doesn't exist".format(owner))
+        friend = Item(g.user.id, user.id)
+        db.session.add(friend)
+        db.session.commit()
+        return {'status': 'OK'}, 201
+
+class FollowersAPI(Resource):
+    @auth.login_required
+    def get(self):
+        return [{'username' : e.user_from} for e in Item.query.filter_by(user_to=g.user.id).all()]
+
 api.add_resource(UserAPI, '/user/<int:user_id>')
 api.add_resource(UsersAPI, '/users')
 
 api.add_resource(ItemAPI, '/item/<int:item_id>')
 api.add_resource(ItemsAPI, '/items')
+
+api.add_resource(FriendsAPI, '/friends')
+api.add_resource(FollowersAPI, '/followers')
 
 api.add_resource(InboxAPI, '/inbox')
 api.add_resource(OutboxAPI, '/outbox')
