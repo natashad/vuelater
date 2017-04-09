@@ -74,7 +74,12 @@ class Item(db.Model):
         return "<Item {} {} {} {}>".format(self.id, self.owner, self.sender, self.url)
 
     def as_dict(self):
-       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return {
+            'id'     : self.id, 
+            'owner'  : User.query.get(self.owner).username, 
+            'sender' : User.query.get(self.owner).username,
+            'url'    : self.url
+        }
 
 class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -152,7 +157,6 @@ class UsersAPI(Resource):
         return {'status': 'OK'}, 201
 
 class ItemAPI(Resource):
-    @auth.login_required
     def get(self, item_id):
         item = Item.query.get(item_id)
         if item is None:
@@ -186,17 +190,17 @@ class ItemAPI(Resource):
         return "", 204
 
 class ItemsAPI(Resource):
-    @auth.login_required
     def get(self):
         return [e.as_dict() for e in Item.query.all()]
 
     @auth.login_required
     def post(self):
+        #TODO check if friends?
         owner = request.json.get('owner')
-        user = User.query.get(owner)
+        user = User.query.filter_by(username=owner).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        item = Item(owner, g.user.id, request.json.get('url'))
+        item = Item(user.id, g.user.id, request.json.get('url'))
         db.session.add(item)
         db.session.commit()
         return {'status': 'OK'}, 201
