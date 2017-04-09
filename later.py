@@ -77,7 +77,7 @@ class Item(db.Model):
         return {
             'id'     : self.id, 
             'owner'  : User.query.get(self.owner).username, 
-            'sender' : User.query.get(self.owner).username,
+            'sender' : User.query.get(self.sender).username,
             'url'    : self.url
         }
 
