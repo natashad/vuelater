@@ -1,4 +1,4 @@
-from flask import Flask, request, g
+from flask import Flask, request, g, jsonify
 from flask_cors import CORS, cross_origin
 from flask_restful import abort, Resource, Api
 from flask_sqlalchemy import SQLAlchemy
@@ -62,14 +62,16 @@ class User(db.Model):
 class Item(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     owner = db.Column(db.Integer, db.ForeignKey("user.id"))
+    sender = db.Column(db.Integer, db.ForeignKey("user.id"))
     url = db.Column(db.String(80))
 
-    def __init__(self, owner, url):
+    def __init__(self, owner, sender, url):
         self.owner = owner
+        self.sender = sender
         self.url = url
 
     def __repr__(self):
-        return "<Item {} {} {}>".format(self.id, self.owner, self.url)
+        return "<Item {} {} {} {}>".format(self.id, self.owner, self.sender, self.url)
 
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -182,18 +184,20 @@ class ItemsAPI(Resource):
         user = User.query.get(owner)
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        item = Item(owner, request.json.get('url'))
+        item = Item(owner, g.user.id, request.json.get('url'))
         db.session.add(item)
         db.session.commit()
         return item.as_dict(), 201
 
 class InboxAPI(Resource):
     @auth.login_required
-    def get(self, user_id):
-        user = User.query.get(user_id)
-        if user is None:
-            abort(404, message="User {} doesn't exist".format(user_id))
-        return [e.as_dict() for e in Item.query.filter_by(owner=user.id).all()]
+    def get(self):
+        return [e.as_dict() for e in Item.query.filter_by(owner=g.user.id).all()]
+
+class OutboxAPI(Resource):
+    @auth.login_required
+    def get(self):
+        return [e.as_dict() for e in Item.query.filter_by(sender=g.user.id).all()]
 
 api.add_resource(UserAPI, '/user/<int:user_id>')
 api.add_resource(UsersAPI, '/users')
@@ -201,7 +205,8 @@ api.add_resource(UsersAPI, '/users')
 api.add_resource(ItemAPI, '/item/<int:item_id>')
 api.add_resource(ItemsAPI, '/items')
 
-api.add_resource(InboxAPI, '/inbox/<int:user_id>')
+api.add_resource(InboxAPI, '/inbox')
+api.add_resource(InboxAPI, '/outbox')
 
 # TODO connections (pairs of user ids)
 
