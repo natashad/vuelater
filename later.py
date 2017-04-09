@@ -1,4 +1,4 @@
-from flask import Flask, request
+from flask import Flask, request, g
 from flask_restful import abort, Resource, Api
 from flask_sqlalchemy import SQLAlchemy
 
