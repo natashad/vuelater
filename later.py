@@ -76,6 +76,18 @@ class Item(db.Model):
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
 
+class Connection(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_from = db.Column(db.Integer, db.ForeignKey("user.id"))
+    user_to = db.Column(db.Integer, db.ForeignKey("user.id"))
+
+    def __init__(self, user_from, user_to):
+        self.user_from = user_from
+        self.user_to = user_to
+
+    def as_dict(self):
+       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+
 def abort_if_id_doesnt_exist(dic, id):
     if id not in dic:
         abort(404, message="id {} doesn't exist".format(id))
@@ -206,7 +218,7 @@ api.add_resource(ItemAPI, '/item/<int:item_id>')
 api.add_resource(ItemsAPI, '/items')
 
 api.add_resource(InboxAPI, '/inbox')
-api.add_resource(InboxAPI, '/outbox')
+api.add_resource(OutboxAPI, '/outbox')
 
 # TODO connections (pairs of user ids)
 
