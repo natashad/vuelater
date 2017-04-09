@@ -35,10 +35,10 @@ class User(db.Model):
         return "<User {}: {}>".format(self.id, self.username)
 
     def hash_password(self, password):
-        self.password_hash = pwd_context.encrypt(password)
+        self.password_hash = pwd_context.encrypt(password+self.username)
 
     def verify_password(self, password):
-        return pwd_context.verify(password, self.password_hash)
+        return pwd_context.verify(password+self.username, self.password_hash)
 
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
