@@ -218,7 +218,7 @@ class OutboxAPI(Resource):
 class FriendsAPI(Resource):
     @auth.login_required
     def get(self):
-        return [{'username' : e.user_to} for e in Item.query.filter_by(user_from=g.user.id).all()]
+        return [User.query.get(e.user_to).username for e in Item.query.filter_by(user_from=g.user.id).all()]
 
     @auth.login_required
     def post(self):
@@ -234,7 +234,7 @@ class FriendsAPI(Resource):
 class FollowersAPI(Resource):
     @auth.login_required
     def get(self):
-        return [{'username' : e.user_from} for e in Item.query.filter_by(user_to=g.user.id).all()]
+        return [User.query.get(e.user_from).username for e in Item.query.filter_by(user_to=g.user.id).all()]
 
 api.add_resource(UserAPI, '/user/<int:user_id>')
 api.add_resource(UsersAPI, '/users')
