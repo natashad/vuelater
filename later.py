@@ -68,21 +68,31 @@ class Item(db.Model):
     owner = db.Column(db.Integer, db.ForeignKey("user.id"))
     sender = db.Column(db.Integer, db.ForeignKey("user.id"))
     url = db.Column(db.String(80))
+    note = db.Column(db.String(256))
+    duration = db.Column(db.String(10))
+    item_type = db.Column(db.String(80))
 
-    def __init__(self, owner, sender, url):
+    def __init__(self, owner, sender, url, note = '', duration = '', item_type = ''):
         self.owner = owner
         self.sender = sender
         self.url = url
+        self.note = note
+        self.duration = duration
+        self.item_type = item_type
 
     def __repr__(self):
         return "<Item {} {} {} {}>".format(self.id, self.owner, self.sender, self.url)
 
     def as_dict(self):
         return {
-            'id'     : self.id, 
-            'owner'  : User.query.get(self.owner).email, 
-            'sender' : User.query.get(self.sender).email,
-            'url'    : self.url
+            'id'       : self.id, 
+            'owner'    : User.query.get(self.owner).email, 
+            'sender'   : User.query.get(self.sender).email,
+            'url'      : self.url,
+            'note'     : self.note,
+            'duration' : self.duration,
+            'type'     : self.type
+
         }
 
 class Friend(db.Model):
@@ -207,7 +217,10 @@ class ItemsAPI(Resource):
         user = User.query.filter_by(email=owner).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        item = Item(user.id, g.user.id, request.json.get('url'))
+        note = '' if request.json.get('note') is None else request.json.get('note')
+        duration = '' if request.json.get('duration') is None else request.json.get('duration')
+        item_type = '' if request.json.get('type') is None else request.json.get('type')
+        item = Item(user.id, g.user.id, request.json.get('url'), note, duration, item_type)
         db.session.add(item)
         db.session.commit()
         return {'status': 'OK'}, 201
