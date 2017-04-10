@@ -91,7 +91,7 @@ class Item(db.Model):
             'url'      : self.url,
             'note'     : self.note,
             'duration' : self.duration,
-            'type'     : self.type
+            'type'     : self.item_type
 
         }
 
