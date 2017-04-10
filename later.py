@@ -25,20 +25,24 @@ api = Api(app)
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True)
+    email = db.Column(db.String(80), unique=True)
+    first_name = db.Column(db.String(80))
+    last_name = db.Column(db.String(80))
     password_hash = db.Column(db.String(128))
 
-    def __init__(self, username):
-        self.username = username
+    def __init__(self, email, first_name, last_name):
+        self.email = email
+        self.first_name = first_name
+        self.last_name = last_name
 
     def __repr__(self):
-        return "<User {}: {}>".format(self.id, self.username)
+        return "<User {}: {} {} {}>".format(self.id, self.email, self.first_name, self.last_name)
 
     def hash_password(self, password):
-        self.password_hash = pwd_context.encrypt(password+self.username)
+        self.password_hash = pwd_context.encrypt(password+self.email)
 
     def verify_password(self, password):
-        return pwd_context.verify(password+self.username, self.password_hash)
+        return pwd_context.verify(password+self.email, self.password_hash)
 
     def as_dict(self):
        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
@@ -76,8 +80,8 @@ class Item(db.Model):
     def as_dict(self):
         return {
             'id'     : self.id, 
-            'owner'  : User.query.get(self.owner).username, 
-            'sender' : User.query.get(self.sender).username,
+            'owner'  : User.query.get(self.owner).email, 
+            'sender' : User.query.get(self.sender).email,
             'url'    : self.url
         }
 
@@ -98,12 +102,12 @@ def abort_if_id_doesnt_exist(dic, id):
         abort(404, message="id {} doesn't exist".format(id))
 
 @auth.verify_password
-def verify_password(username_or_token, password):
+def verify_password(email_or_token, password):
     # first try to authenticate by token
-    user = User.verify_auth_token(username_or_token)
+    user = User.verify_auth_token(email_or_token)
     if not user:
-        # try to authenticate with username/password
-        user = User.query.filter_by(username = username_or_token).first()
+        # try to authenticate with email/password
+        user = User.query.filter_by(email = email_or_token).first()
         if not user or not user.verify_password(password):
             return False
     g.user = user
@@ -126,7 +130,7 @@ class UserAPI(Resource):
         user = User.query.get(user_id)
         if user is None:
             abort(404, message="User {} doesn't exist".format(user_id))
-        user.username = request.form['name']
+        user.email = request.form['email']
         db.session.add(user)
         db.session.commit()
         return user.as_dict(), 201
@@ -144,13 +148,16 @@ class UsersAPI(Resource):
         return [e.as_dict() for e in User.query.all()]
 
     def post(self):
-        username = request.json.get('username')
+        email = request.json.get('email')
         password = request.json.get('password')
-        if username is None or password is None:
+        first_name = request.json.get('first_name')
+        last_name = request.json.get('last_name')
+
+        if email is None or password is None or first_name is None or last_name is None:
             abort(400) # missing arguments
-        if User.query.filter_by(username = username).first() is not None:
+        if User.query.filter_by(email = email).first() is not None:
             abort(400) # existing user
-        user = User(username = username)
+        user = User(email, first_name, last_name)
         user.hash_password(password)
         db.session.add(user)
         db.session.commit()
@@ -197,7 +204,7 @@ class ItemsAPI(Resource):
     def post(self):
         #TODO check if friends?
         owner = request.json.get('owner')
-        user = User.query.filter_by(username=owner).first()
+        user = User.query.filter_by(email=owner).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
         item = Item(user.id, g.user.id, request.json.get('url'))
@@ -218,12 +225,12 @@ class OutboxAPI(Resource):
 class FriendsAPI(Resource):
     @auth.login_required
     def get(self):
-        return [User.query.get(e.user_to).username for e in Item.query.filter_by(user_from=g.user.id).all()]
+        return [User.query.get(e.user_to).email for e in Item.query.filter_by(user_from=g.user.id).all()]
 
     @auth.login_required
     def post(self):
         friendee = request.json.get('friendee')
-        user = User.query.filter_by(username=friendee).first()
+        user = User.query.filter_by(email=friendee).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
         friend = Item(g.user.id, user.id)
