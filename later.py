@@ -127,7 +127,10 @@ def verify_password(email_or_token, password):
 @auth.login_required
 def get_auth_token():
     token = g.user.generate_auth_token()
-    return jsonify({ 'token': token.decode('ascii') })
+    return jsonify({ 'token'      : token.decode('ascii'),
+                     'email'      : g.user.email,
+                     'first_name' : g.user.first_name,
+                     'last_name'  : g.user.last_name })
 
 class UserAPI(Resource):
     def get(self, user_id):
@@ -181,23 +184,6 @@ class ItemAPI(Resource):
         return item.as_dict(), 200
 
     @auth.login_required
-    def put(self, item_id):
-        item = Item.query.get(item_id)
-        if item is None:
-            abort(404, message="Item {} doesn't exist".format(item_id))
-        
-        owner = request.json.get('owner')
-        user = User.query.get(owner)
-        if user is None:
-            abort(404, message="User {} doesn't exist".format(owner))
-        
-        item.url = request.json.get('url')
-        item.owner = owner
-        db.session.add(item)
-        db.session.commit()
-        return item.as_dict(), 201
-
-    @auth.login_required
     def delete(self, item_id):
         item = Item.query.get(item_id)
         if item is None:
@@ -238,7 +224,11 @@ class OutboxAPI(Resource):
 class FriendsAPI(Resource):
     @auth.login_required
     def get(self):
-        return [User.query.get(e.user_to).email for e in Item.query.filter_by(user_from=g.user.id).all()]
+        return [{ 'email'      : user.email,
+                  'first_name' : user.first_name,
+                  'last_name'  : user.last_name} 
+                  for user in map(lambda x : User.query.get(x.user_to),
+                                  Friend.query.filter_by(user_from=g.user.id).all())]
 
     @auth.login_required
     def post(self):
@@ -246,7 +236,7 @@ class FriendsAPI(Resource):
         user = User.query.filter_by(email=friendee).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        friend = Item(g.user.id, user.id)
+        friend = Friend(g.user.id, user.id)
         db.session.add(friend)
         db.session.commit()
         return {'status': 'OK'}, 201
@@ -254,7 +244,11 @@ class FriendsAPI(Resource):
 class FollowersAPI(Resource):
     @auth.login_required
     def get(self):
-        return [User.query.get(e.user_from).username for e in Item.query.filter_by(user_to=g.user.id).all()]
+        return [{ 'email'      : user.email,
+                  'first_name' : user.first_name,
+                  'last_name'  : user.last_name} 
+                  for user in map(lambda x : User.query.get(x.user_from),
+                                  Friend.query.filter_by(user_to=g.user.id).all())]
 
 api.add_resource(UserAPI, '/user/<int:user_id>')
 api.add_resource(UsersAPI, '/users')
@@ -267,11 +261,6 @@ api.add_resource(FollowersAPI, '/followers')
 
 api.add_resource(InboxAPI, '/inbox')
 api.add_resource(OutboxAPI, '/outbox')
-
-# TODO connections (pairs of user ids)
-
-# TODO outbox
-# TODO login
 
 if __name__ == '__main__':
     app.run(debug=True)
