@@ -256,7 +256,7 @@ api.add_resource(UsersAPI, '/users')
 api.add_resource(ItemAPI, '/item/<int:item_id>')
 api.add_resource(ItemsAPI, '/items')
 
-api.add_resource(FriendsAPI, '/friends')
+api.add_resource(FriendsAPI, '/following')
 api.add_resource(FollowersAPI, '/followers')
 
 api.add_resource(InboxAPI, '/inbox')
