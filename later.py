@@ -45,7 +45,13 @@ class User(db.Model):
         return pwd_context.verify(password+self.email, self.password_hash)
 
     def as_dict(self):
-       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return {
+            'id'         : self.id, 
+            'email'      : self.email, 
+            'first_name' : self.first_name,
+            'last_name'  : self.last_name
+
+        }
 
     def generate_auth_token(self, expiration = 3600):
         s = Serializer(app.config['SECRET_KEY'], expires_in = expiration)
@@ -71,6 +77,7 @@ class Item(db.Model):
     note = db.Column(db.String(256))
     duration = db.Column(db.String(10))
     item_type = db.Column(db.String(80))
+    archived = db.Column(db.Bool)
 
     def __init__(self, owner, sender, url, note = '', duration = '', item_type = ''):
         self.owner = owner
@@ -79,9 +86,7 @@ class Item(db.Model):
         self.note = note
         self.duration = duration
         self.item_type = item_type
-
-    def __repr__(self):
-        return "<Item {} {} {} {}>".format(self.id, self.owner, self.sender, self.url)
+        self.archived = False
 
     def as_dict(self):
         return {
@@ -91,7 +96,8 @@ class Item(db.Model):
             'url'      : self.url,
             'note'     : self.note,
             'duration' : self.duration,
-            'type'     : self.item_type
+            'type'     : self.item_type,
+            'archived' : self.archived
 
         }
 
@@ -190,7 +196,7 @@ class ItemAPI(Resource):
             abort(404, message="Item {} doesn't exist".format(item_id))
         db.session.delete(item)
         db.session.commit()
-        return "", 204
+        return {'status': 'OK'}, 204
 
 class ItemsAPI(Resource):
     def get(self):
@@ -250,6 +256,29 @@ class FollowersAPI(Resource):
                   for user in map(lambda x : User.query.get(x.user_from),
                                   Friend.query.filter_by(user_to=g.user.id).all())]
 
+class ArchiveAPI(Resource):
+    @auth.login_required
+    def post(self):
+        itemID = request.json.get('item')
+        archived = request.json.get('archived')
+
+        if itemID is None or archived is None:
+            abort(404, message="field(s) missing from json".)
+
+        item = Item.query.get(itemID)
+
+        if item is None:
+            abort(404, message="Item {} doesn't exist".format(itemID))
+        elif item.owner != g.user_id:
+            abort(404, message="You do not own item {}!".format(itemID))
+
+        item.archived = archived
+        db.session.add(item)
+        db.session.commit()
+        return {'status': 'OK'}, 200
+
+
+
 api.add_resource(UserAPI, '/user/<int:user_id>')
 api.add_resource(UsersAPI, '/users')
 
@@ -261,6 +290,8 @@ api.add_resource(FollowersAPI, '/followers')
 
 api.add_resource(InboxAPI, '/inbox')
 api.add_resource(OutboxAPI, '/outbox')
+
+api.add_resource(ArchiveAPI, '/archive')
 
 if __name__ == '__main__':
     app.run(debug=True)
