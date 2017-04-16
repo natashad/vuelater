@@ -77,7 +77,7 @@ class Item(db.Model):
     note = db.Column(db.String(256))
     duration = db.Column(db.String(10))
     item_type = db.Column(db.String(80))
-    archived = db.Column(db.Bool)
+    archived = db.Column(db.Boolean())
 
     def __init__(self, owner, sender, url, note = '', duration = '', item_type = ''):
         self.owner = owner
@@ -105,13 +105,20 @@ class Friend(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_from = db.Column(db.Integer, db.ForeignKey("user.id"))
     user_to = db.Column(db.Integer, db.ForeignKey("user.id"))
+    connection_type = db.Column(db.String(10))
 
-    def __init__(self, user_from, user_to):
+    def __init__(self, user_from, user_to, connection_type):
         self.user_from = user_from
         self.user_to = user_to
+        self.connection_type = connection_type
 
     def as_dict(self):
-       return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        return {
+            'user_from' : User.query.get(self.user_from).email,
+            'user_to'   : User.query.get(self.user_to).email,
+            'type'      : self.connection_type
+
+        }
 
 def abort_if_id_doesnt_exist(dic, id):
     if id not in dic:
@@ -234,15 +241,20 @@ class FriendsAPI(Resource):
                   'first_name' : user.first_name,
                   'last_name'  : user.last_name} 
                   for user in map(lambda x : User.query.get(x.user_to),
-                                  Friend.query.filter_by(user_from=g.user.id).all())]
+                                  Friend.query.filter_by(user_from=g.user.id).filter_by(connection_type='friend').all())]
 
     @auth.login_required
     def post(self):
         friendee = request.json.get('friendee')
+        connection_type = request.json.get('type')
+        if friendee is None or connection_type is None:
+            abort(404, message="Missing JSON field(s)")
+        elif connection_type.lower() not in ['friend', 'block']:
+            abort(404, message="Type must be either 'friend' or 'block'")
         user = User.query.filter_by(email=friendee).first()
         if user is None:
             abort(404, message="User {} doesn't exist".format(owner))
-        friend = Friend(g.user.id, user.id)
+        friend = Friend(g.user.id, user.id, connection_type)
         db.session.add(friend)
         db.session.commit()
         return {'status': 'OK'}, 201
@@ -254,7 +266,7 @@ class FollowersAPI(Resource):
                   'first_name' : user.first_name,
                   'last_name'  : user.last_name} 
                   for user in map(lambda x : User.query.get(x.user_from),
-                                  Friend.query.filter_by(user_to=g.user.id).all())]
+                                  Friend.query.filter_by(user_to=g.user.id).filter_by(connection_type='friend').all())]
 
 class ArchiveAPI(Resource):
     @auth.login_required
@@ -263,7 +275,7 @@ class ArchiveAPI(Resource):
         archived = request.json.get('archived')
 
         if itemID is None or archived is None:
-            abort(404, message="field(s) missing from json".)
+            abort(404, message="Missing JSON field(s)")
 
         item = Item.query.get(itemID)
 
