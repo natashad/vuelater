@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask, request, g, jsonify
 from flask_cors import CORS, cross_origin
 from flask_restful import abort, Resource, Api
